@@ -1,0 +1,136 @@
+-- Create the Venue Table
+CREATE TABLE venue (
+    venue_id INTEGER NOT NULL PRIMARY KEY, 
+    venue_name VARCHAR(200) NOT NULL UNIQUE
+);
+
+-- Insert data into Venue Table
+INSERT INTO venue VALUES (1, 'MA Chidambaram Stadium, Chepauk, Chennai');
+
+-- Create the Team Table
+CREATE TABLE team (
+    team_id INTEGER NOT NULL PRIMARY KEY,
+    team_name VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- Insert data into Team Table
+INSERT INTO team VALUES (1, 'Royal Challengers Bengaluru');
+INSERT INTO team VALUES (2, 'Chennai Super Kings');
+
+-- Create the Player Table
+CREATE TABLE player (
+    player_id INTEGER NOT NULL PRIMARY KEY,
+    player_name VARCHAR(100) NOT NULL,
+    team_id INTEGER NOT NULL,
+    FOREIGN KEY (team_id) REFERENCES team(team_id)
+);
+
+-- Insert data into Player Table
+-- (data truncated for brevity)
+
+-- Create the Match Table
+CREATE TABLE match (
+    match_id INTEGER NOT NULL PRIMARY KEY,
+    match_date VARCHAR(10) NOT NULL,
+    venue_id INTEGER NOT NULL,
+    FOREIGN KEY (venue_id) REFERENCES venue(venue_id)
+);
+
+-- Insert data into Match Table
+INSERT INTO match VALUES (1, '2024-03-22', 1);
+
+-- Create the Innings Table
+CREATE TABLE innings (
+    match_id INTEGER NOT NULL,
+    innings_no INTEGER NOT NULL,
+    batting_team_id INTEGER NOT NULL,
+    bowling_team_id INTEGER NOT NULL,
+    PRIMARY KEY (match_id, innings_no),
+    FOREIGN KEY (batting_team_id) REFERENCES team(team_id),
+    FOREIGN KEY (bowling_team_id) REFERENCES team(team_id)
+);
+
+-- Insert data into Innings Table
+INSERT INTO innings VALUES (1, 1, 1, 2);
+INSERT INTO innings VALUES (1, 2, 2, 1);
+
+-- Create the Score_by_ball Table
+CREATE TABLE score_by_ball (
+    match_id INTEGER,
+    innings_no INTEGER,
+    ball_no FLOAT,
+    striker_id INTEGER,
+    non_striker_id INTEGER,
+    bowler_id INTEGER,
+    runs_off_bat INTEGER,
+    extras INTEGER,
+    wides INTEGER,
+    noballs INTEGER,
+    byes INTEGER,
+    legbyes INTEGER,
+    penalty INTEGER,
+    wicket_type VARCHAR(200),
+    dismissed_player_id INTEGER,
+    PRIMARY KEY (match_id, innings_no, ball_no),
+    FOREIGN KEY (match_id, innings_no) REFERENCES innings(match_id, innings_no),
+    FOREIGN KEY (striker_id) REFERENCES player(player_id),
+    FOREIGN KEY (non_striker_id) REFERENCES player(player_id),
+    FOREIGN KEY (bowler_id) REFERENCES player(player_id),
+    FOREIGN KEY (dismissed_player_id) REFERENCES player(player_id)
+);
+
+-- Insert data into Score_by_ball Table
+-- (data truncated for brevity)
+
+-- Create the Result Table
+CREATE TABLE result (
+    match_id INTEGER NOT NULL,
+    winning_team_id INTEGER NOT NULL,
+    margin INTEGER NOT NULL,
+    PRIMARY KEY (match_id),
+    FOREIGN KEY (match_id) REFERENCES match(match_id),
+    FOREIGN KEY (winning_team_id) REFERENCES team(team_id)
+);
+
+-- Insert data into Result Table
+INSERT INTO result VALUES (1, 2, 24);
+
+-- SQL Queries for Website
+-- Match Summary
+SELECT m.match_id, m.match_date, v.venue_name, t.team_name AS winning_team_name
+FROM match m
+JOIN venue v ON m.venue_id = v.venue_id
+JOIN result r ON m.match_id = r.match_id
+JOIN team t ON r.winning_team_id = t.team_id;
+
+-- Innings Summary
+SELECT i.match_id, i.innings_no, t.team_name, SUM(s.runs_off_bat + s.extras) AS total_runs,
+       COUNT(s.wicket_type) AS total_wickets,
+       (COUNT(*) - COUNT(s.wides) - COUNT(s.noballs)) / 6 || '.' || MOD((COUNT(*) - COUNT(s.wides) - COUNT(s.noballs)), 6) AS total_overs
+FROM innings i
+JOIN team t ON i.batting_team_id = t.team_id
+JOIN score_by_ball s ON i.match_id = s.match_id AND i.innings_no = s.innings_no
+GROUP BY i.match_id, i.innings_no, t.team_name;
+
+-- Batting Summary (Batsman Level)
+SELECT i.match_id, i.innings_no, t.team_name, p.player_name, SUM(s.runs_off_bat) AS total_runs,
+       COUNT(*) AS total_balls, SUM(CASE WHEN s.runs_off_bat = 4 THEN 1 ELSE 0 END) AS no_of_fours,
+       SUM(CASE WHEN s.runs_off_bat = 6 THEN 1 ELSE 0 END) AS no_of_sixes,
+       (SUM(s.runs_off_bat) * 100.0 / COUNT(*)) AS strike_rate
+FROM innings i
+JOIN team t ON i.batting_team_id = t.team_id
+JOIN score_by_ball s ON i.match_id = s.match_id AND i.innings_no = s.innings_no
+JOIN player p ON s.striker_id = p.player_id
+WHERE s.wides IS NULL AND s.noballs IS NULL
+GROUP BY i.match_id, i.innings_no, t.team_name, p.player_name;
+
+-- Batting Summary (Extras)
+SELECT i.match_id, i.innings_no, t.team_name, SUM(s.extras) AS total_extras, SUM(s.noballs) AS total_noballs,
+       SUM(s.wides) AS total_wides, SUM(s.byes) AS total_byes, SUM(s.legbyes) AS total_legbyes, SUM(s.penalty) AS total_penalty
+FROM innings i
+JOIN team t ON i.batting_team_id = t.team_id
+JOIN score_by_ball s ON i.match_id = s.match_id AND i.innings_no = s.innings_no
+GROUP BY i.match_id, i.innings_no, t.team_name;
+
+-- Bowling Summary (Bowler Level)
+SELECT i.match_id, i.innings_no, t
